@@ -1,5 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <queries>
+        <package android:name="com.miniclip.eightballpool" />
+    </queries>
+
     <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Shito Pool Hacker" android:allowBackup="false">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
