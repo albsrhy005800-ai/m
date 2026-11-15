@@ -69,25 +69,51 @@ class AimOverlayService : Service() {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val found = detection
-            val cue = found.cue ?: return
             val table = found.table ?: return
+            val cue = found.cue ?: return
             val target = found.balls.minByOrNull {
                 kotlin.math.hypot(it.x - cue.x, it.y - cue.y)
+            } ?: run {
+                canvas.save()
+                canvas.clipRect(table)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.WHITE
+                paint.strokeWidth = 3f
+                canvas.drawCircle(cue.x, cue.y, 12f, paint)
+                canvas.restore()
+                return
             }
 
-            // Draw the cue-ball marker whenever it is detected. A missed object ball
-            // must not suppress all feedback.
             canvas.save()
             canvas.clipRect(table)
+
+            val dx = target.x - cue.x
+            val dy = target.y - cue.y
+            val length = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
+            val ux = dx / length
+            val uy = dy / length
+            val ballRadius = (table.width / 68f).coerceIn(9f, 18f)
+            val contactX = target.x - ux * ballRadius * 2f
+            val contactY = target.y - uy * ballRadius * 2f
+
+            // Cue-ball travel and predicted object-ball route.
             paint.style = Paint.Style.STROKE
             paint.color = Color.WHITE
-            paint.strokeWidth = 3f
-            canvas.drawCircle(cue.x, cue.y, 11f, paint)
-            if (target != null) {
-                paint.color = Color.rgb(80, 255, 150)
-                paint.strokeWidth = 3f
-                canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
-            }
+            paint.strokeWidth = 4f
+            canvas.drawLine(cue.x, cue.y, contactX, contactY, paint)
+            paint.color = Color.rgb(70, 255, 155)
+            paint.strokeWidth = 3.5f
+            canvas.drawLine(target.x, target.y, table.centerX(), table.top, paint)
+
+            // Contact marker and ball outlines.
+            paint.color = Color.WHITE
+            paint.strokeWidth = 2.5f
+            canvas.drawCircle(contactX, contactY, ballRadius * 0.72f, paint)
+            paint.color = Color.rgb(90, 255, 170)
+            canvas.drawCircle(target.x, target.y, ballRadius, paint)
+            paint.color = Color.WHITE
+            canvas.drawCircle(cue.x, cue.y, ballRadius, paint)
+
             canvas.restore()
         }
     }
