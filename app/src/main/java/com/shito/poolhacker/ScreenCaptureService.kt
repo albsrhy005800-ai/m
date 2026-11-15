@@ -29,7 +29,7 @@ class ScreenCaptureService:Service(){
  }
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
   val code=i?.getIntExtra(EXTRA_RESULT_CODE,0)?:0
-  val data=if(Build.VERSION.SDK_INT>=33)i?.getParcelableExtra(EXTRA_RESULT_DATA,Intent::class.java) else @Suppress("DEPRECATION") i?.getParcelableExtra(EXTRA_RESULT_DATA)
+  @Suppress("DEPRECATION") val data=i?.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
   if(data==null||code==0){stopSelf();return START_NOT_STICKY}
   val mgr=getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
   projection=mgr.getMediaProjection(code,data)
