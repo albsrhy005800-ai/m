@@ -111,9 +111,13 @@ class MainActivity : Activity() {
         root.addView(permissionButton, matchWrap())
 
         val stopButton = Button(this).apply {
-            text = "إيقاف خطوط التصويب"
+            text = "إيقاف التعرف والخطوط"
             isAllCaps = false
-            setOnClickListener { stopService(Intent(this@MainActivity, AimOverlayService::class.java)) }
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, ScreenCaptureService::class.java))
+                stopService(Intent(this@MainActivity, AimOverlayService::class.java))
+                statusText.text = "تم إيقاف التعرف والخطوط"
+            }
         }
         root.addView(stopButton, matchWrap())
 
