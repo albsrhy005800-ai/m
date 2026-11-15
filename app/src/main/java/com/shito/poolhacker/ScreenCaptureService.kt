@@ -19,7 +19,7 @@ import android.view.WindowManager
 class ScreenCaptureService:Service(){
  companion object { const val EXTRA_RESULT_CODE="result_code"; const val EXTRA_RESULT_DATA="result_data"; private const val CHANNEL="shito_capture" }
  private var projection:MediaProjection?=null; private var reader:ImageReader?=null; private var display:VirtualDisplay?=null
- private var thread:HandlerThread?=null; private var handler:Handler?=null
+ private var thread:HandlerThread?=null; private var handler:Handler?=null; private var lastFrameAt=0L
  override fun onCreate(){super.onCreate()
   if(Build.VERSION.SDK_INT>=26){getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL,"تحليل شاشة اللعبة",NotificationManager.IMPORTANCE_LOW))}
   val note=if(Build.VERSION.SDK_INT>=26) Notification.Builder(this,CHANNEL) else Notification.Builder(this)
@@ -36,6 +36,9 @@ class ScreenCaptureService:Service(){
   val dm=DisplayMetrics();@Suppress("DEPRECATION") (getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(dm)
   reader=ImageReader.newInstance(dm.widthPixels,dm.heightPixels,PixelFormat.RGBA_8888,2)
   reader!!.setOnImageAvailableListener({ir-> val image=ir.acquireLatestImage()?:return@setOnImageAvailableListener
+   val now=System.currentTimeMillis()
+   if(now-lastFrameAt<350){image.close();return@setOnImageAvailableListener}
+   lastFrameAt=now
    try{val p=image.planes[0];val pad=p.rowStride/p.pixelStride-dm.widthPixels
     val full=Bitmap.createBitmap(dm.widthPixels+pad,dm.heightPixels,Bitmap.Config.ARGB_8888);full.copyPixelsFromBuffer(p.buffer)
     val bmp=Bitmap.createBitmap(full,0,0,dm.widthPixels,dm.heightPixels);full.recycle()
