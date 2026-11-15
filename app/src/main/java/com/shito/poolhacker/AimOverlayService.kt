@@ -101,9 +101,24 @@ class AimOverlayService : Service() {
             paint.color = Color.WHITE
             paint.strokeWidth = 4f
             canvas.drawLine(cue.x, cue.y, contactX, contactY, paint)
+            val pockets = listOf(
+                PointF(table.left, table.top),
+                PointF(table.centerX(), table.top),
+                PointF(table.right, table.top),
+                PointF(table.left, table.bottom),
+                PointF(table.centerX(), table.bottom),
+                PointF(table.right, table.bottom)
+            )
+            val pocket = pockets.minByOrNull {
+                kotlin.math.hypot(it.x - target.x, it.y - target.y)
+            }!!
             paint.color = Color.rgb(70, 255, 155)
             paint.strokeWidth = 3.5f
-            canvas.drawLine(target.x, target.y, table.centerX(), table.top, paint)
+            canvas.drawLine(target.x, target.y, pocket.x, pocket.y, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(70, 255, 155)
+            canvas.drawCircle(pocket.x, pocket.y, 5f, paint)
+            paint.style = Paint.Style.STROKE
 
             // Contact marker and ball outlines.
             paint.color = Color.WHITE
