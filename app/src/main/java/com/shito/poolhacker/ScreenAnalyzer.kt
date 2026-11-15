@@ -43,7 +43,7 @@ object ScreenAnalyzer {
         // A pool table is a wide landscape surface. This rejects portrait launchers
         // and wallpaper backgrounds that were previously mistaken for blue felt.
         if (feltCount < 450 || tableWidth < w / 4 || tableHeight < h / 5 ||
-            tableRatio !in 1.20f..2.20f) {
+            tableRatio !in 0.85f..2.60f) {
             return DetectionResult()
         }
 
