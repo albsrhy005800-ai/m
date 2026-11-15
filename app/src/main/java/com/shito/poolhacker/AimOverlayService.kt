@@ -6,13 +6,23 @@ import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PixelFormat\nimport android.graphics.PointF\nimport android.graphics.RectF
+import android.graphics.PixelFormat
+import android.graphics.PointF
+import android.graphics.RectF
 import android.os.IBinder
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 
-class AimOverlayService : Service() {\n    companion object { @Volatile private var detection = DetectionResult(); fun updateDetection(value: DetectionResult) { detection = value } }
+class AimOverlayService : Service() {
+    companion object {
+        @Volatile private var detection = DetectionResult()
+        private var currentView: View? = null
+        fun updateDetection(value: DetectionResult) {
+            detection = value
+            currentView?.postInvalidate()
+        }
+    }
     private lateinit var windowManager: WindowManager
     private var aimView: View? = null
 
@@ -20,6 +30,7 @@ class AimOverlayService : Service() {\n    companion object { @Volatile private 
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         aimView = AimView(this)
+        currentView = aimView
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -35,6 +46,7 @@ class AimOverlayService : Service() {\n    companion object { @Volatile private 
     override fun onDestroy() {
         aimView?.let { windowManager.removeView(it) }
         aimView = null
+        currentView = null
         super.onDestroy()
     }
 
