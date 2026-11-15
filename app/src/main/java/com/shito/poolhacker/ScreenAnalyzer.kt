@@ -4,30 +4,90 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PointF
 import android.graphics.RectF
+import kotlin.math.abs
+import kotlin.math.hypot
 
-data class DetectionResult(val table: RectF? = null, val cue: PointF? = null, val balls: List<PointF> = emptyList())
+data class DetectionResult(
+    val table: RectF? = null,
+    val cue: PointF? = null,
+    val balls: List<PointF> = emptyList()
+)
 
 object ScreenAnalyzer {
-    fun analyze(b: Bitmap): DetectionResult {
-        var l=b.width; var t=b.height; var r=0; var bot=0; var n=0
-        val step=4
-        for(y in 0 until b.height step step) for(x in 0 until b.width step step) {
-            val c=b.getPixel(x,y); val hsv=FloatArray(3); Color.colorToHSV(c,hsv)
-            if(hsv[1]>.30f && hsv[2]>.15f && (hsv[0] in 65f..175f || hsv[0] in 175f..255f || hsv[0] in 12f..48f)) {
-                l=minOf(l,x); t=minOf(t,y); r=maxOf(r,x); bot=maxOf(bot,y); n++
+    fun analyze(bitmap: Bitmap): DetectionResult {
+        val w = bitmap.width
+        val h = bitmap.height
+        val stride = 4
+        var left = w
+        var top = h
+        var right = 0
+        var bottom = 0
+        var feltCount = 0
+        val hsv = FloatArray(3)
+
+        // Estimate the playing surface from felt-colored pixels, not a fixed table template.
+        for (y in 0 until h step stride) {
+            for (x in 0 until w step stride) {
+                Color.colorToHSV(bitmap.getPixel(x, y), hsv)
+                if (isFelt(hsv)) {
+                    left = minOf(left, x); top = minOf(top, y)
+                    right = maxOf(right, x); bottom = maxOf(bottom, y)
+                    feltCount++
+                }
             }
         }
-        if(n<450 || r-l<b.width/4 || bot-t<b.height/5) return DetectionResult()
-        val table=RectF(l.toFloat(),t.toFloat(),r.toFloat(),bot.toFloat())
-        var cue:PointF?=null; var best=0
-        for(y in (t+14) until (bot-14) step 8) for(x in (l+14) until (r-14) step 8) {
-            var score=0
-            for(dy in -12..12 step 4) for(dx in -12..12 step 4) if(dx*dx+dy*dy<=144) {
-                val c=b.getPixel(x+dx,y+dy); val rr=Color.red(c); val gg=Color.green(c); val bb=Color.blue(c)
-                if(rr>205 && gg>205 && bb>195 && maxOf(rr,gg,bb)-minOf(rr,gg,bb)<45) score++
-            }
-            if(score>best){best=score;cue=PointF(x.toFloat(),y.toFloat())}
+        if (feltCount < 450 || right - left < w / 4 || bottom - top < h / 5) {
+            return DetectionResult()
         }
-        return DetectionResult(table,if(best>=5) cue else null)
+
+        val table = RectF(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+        val cue = findWhiteBall(bitmap, left, top, right, bottom)
+        val balls = findColoredBallCenters(bitmap, left, top, right, bottom)
+        return DetectionResult(table, cue, balls)
+    }
+
+    private fun isFelt(hsv: FloatArray): Boolean =
+        hsv[1] > 0.30f && hsv[2] > 0.15f &&
+            (hsv[0] in 65f..175f || hsv[0] in 175f..255f || hsv[0] in 12f..48f)
+
+    private fun findWhiteBall(b: Bitmap, l: Int, t: Int, r: Int, bot: Int): PointF? {
+        var best: PointF? = null
+        var bestScore = 0
+        for (y in (t + 14).coerceAtLeast(14) until (bot - 14).coerceAtMost(b.height - 14) step 6) {
+            for (x in (l + 14).coerceAtLeast(14) until (r - 14).coerceAtMost(b.width - 14) step 6) {
+                var score = 0
+                for (dy in -10..10 step 5) for (dx in -10..10 step 5) {
+                    if (dx * dx + dy * dy > 100) continue
+                    val c = b.getPixel(x + dx, y + dy)
+                    val red = Color.red(c); val green = Color.green(c); val blue = Color.blue(c)
+                    if (red > 205 && green > 205 && blue > 195 &&
+                        maxOf(red, green, blue) - minOf(red, green, blue) < 45) score++
+                }
+                if (score > bestScore) { bestScore = score; best = PointF(x.toFloat(), y.toFloat()) }
+            }
+        }
+        return if (bestScore >= 5) best else null
+    }
+
+    private fun findColoredBallCenters(b: Bitmap, l: Int, t: Int, r: Int, bot: Int): List<PointF> {
+        val candidates = ArrayList<PointF>()
+        val hsv = FloatArray(3)
+        for (y in (t + 16).coerceAtLeast(16) until (bot - 16).coerceAtMost(b.height - 16) step 10) {
+            for (x in (l + 16).coerceAtLeast(16) until (r - 16).coerceAtMost(b.width - 16) step 10) {
+                Color.colorToHSV(b.getPixel(x, y), hsv)
+                if (hsv[1] < 0.48f || hsv[2] < 0.30f) continue
+                var sameColor = 0
+                val centerHue = hsv[0]
+                for (dy in -10..10 step 5) for (dx in -10..10 step 5) {
+                    Color.colorToHSV(b.getPixel(x + dx, y + dy), hsv)
+                    val hueDistance = minOf(abs(hsv[0] - centerHue), 360f - abs(hsv[0] - centerHue))
+                    if (hsv[1] > 0.30f && hueDistance < 24f) sameColor++
+                }
+                if (sameColor >= 7 && candidates.none { hypot(it.x - x.toFloat(), it.y - y.toFloat()) < 25f }) {
+                    candidates.add(PointF(x.toFloat(), y.toFloat()))
+                }
+            }
+        }
+        return candidates.take(16)
     }
 }
