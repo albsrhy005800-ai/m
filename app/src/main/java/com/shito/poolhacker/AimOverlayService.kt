@@ -6,13 +6,13 @@ import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PixelFormat
+import android.graphics.PixelFormat\nimport android.graphics.PointF\nimport android.graphics.RectF
 import android.os.IBinder
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 
-class AimOverlayService : Service() {
+class AimOverlayService : Service() {\n    companion object { @Volatile private var detection = DetectionResult(); fun updateDetection(value: DetectionResult) { detection = value } }
     private lateinit var windowManager: WindowManager
     private var aimView: View? = null
 
@@ -48,18 +48,22 @@ class AimOverlayService : Service() {
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            // Prototype guides only. These are not detected or calculated from game objects yet.
-            val startX = width * 0.5f
-            val startY = height * 0.72f
-            paint.color = Color.GREEN
-            canvas.drawLine(startX, startY, startX, height * 0.12f, paint)
-            paint.color = Color.YELLOW
-            canvas.drawLine(startX, startY, width * 0.18f, height * 0.18f, paint)
-            paint.color = Color.RED
-            canvas.drawLine(startX, startY, width * 0.82f, height * 0.18f, paint)
-            paint.color = Color.WHITE
-            paint.strokeWidth = 2f
-            canvas.drawCircle(startX, startY, 18f, paint)
+            val found = detection
+            val table = found.table
+            val cue = found.cue
+            if (table != null) {
+                paint.color = Color.CYAN
+                paint.strokeWidth = 4f
+                canvas.drawRect(table, paint)
+            }
+            if (cue != null) {
+                paint.color = Color.WHITE
+                paint.strokeWidth = 4f
+                canvas.drawCircle(cue.x, cue.y, 18f, paint)
+                paint.color = Color.GREEN
+                paint.strokeWidth = 5f
+                canvas.drawLine(cue.x, cue.y, table?.right ?: width.toFloat(), cue.y, paint)
+            }
         }
     }
 }
