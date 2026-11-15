@@ -1,6 +1,6 @@
 package com.shito.poolhacker
 
-import android.app.Activity
+import android.app.Activity\nimport android.media.projection.MediaProjectionManager
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -17,7 +17,7 @@ import android.widget.Toast
 
 class MainActivity : Activity() {
     private val poolPackage = "com.miniclip.eightballpool"
-    private var waitingForOverlayPermission = false
+    private var waitingForOverlayPermission = false\n    private val captureRequest = 4102
     private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,7 +91,7 @@ class MainActivity : Activity() {
             isAllCaps = false
             setTextColor(Color.WHITE)
             background = rounded(Color.rgb(25, 150, 95), dp(12))
-            setOnClickListener { openGameWithOverlay() }
+            setOnClickListener { beginCapture() }
         }
         val buttonParams = matchWrap()
         buttonParams.topMargin = dp(24)
@@ -126,28 +126,45 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    private fun openGameWithOverlay() {
-        val launchIntent = packageManager.getLaunchIntentForPackage(poolPackage)
-        if (launchIntent == null) {
-            Toast.makeText(this, "لم يتم العثور على 8 Ball Pool. ثبّت اللعبة أولاً.", Toast.LENGTH_LONG).show()
+    private fun beginCapture() {
+        val launch = packageManager.getLaunchIntentForPackage(poolPackage)
+        if (launch == null) {
+            Toast.makeText(this, "لم يتم العثور على 8 Ball Pool.", Toast.LENGTH_LONG).show()
             return
         }
         if (!Settings.canDrawOverlays(this)) {
             waitingForOverlayPermission = true
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            Toast.makeText(this, "اسمح بالظهور فوق التطبيقات ثم ارجع للتطبيق", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "فعّل الظهور فوق التطبيقات ثم ارجع", Toast.LENGTH_LONG).show()
             return
         }
+        val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        startActivityForResult(manager.createScreenCaptureIntent(), captureRequest)
+    }
+
+    @Deprecated("Deprecated API retained for minimum SDK compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != captureRequest) return
+        if (resultCode != RESULT_OK || data == null) {
+            statusText.text = "لم تتم الموافقة على مشاركة الشاشة"
+            return
+        }
+        val capture = Intent(this, ScreenCaptureService::class.java).apply {
+            putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+            putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+        }
+        startForegroundService(capture)
         startService(Intent(this, AimOverlayService::class.java))
-        statusText.text = "تم تشغيل الخطوط. افتح مباراة داخل اللعبة."
-        startActivity(launchIntent)
+        statusText.text = "بدأ تحليل الشاشة؛ افتح مباراة داخل اللعبة"
+        packageManager.getLaunchIntentForPackage(poolPackage)?.let { startActivity(it) }
     }
 
     override fun onResume() {
         super.onResume()
         if (waitingForOverlayPermission && Settings.canDrawOverlays(this)) {
             waitingForOverlayPermission = false
-            openGameWithOverlay()
+            beginCapture()
         }
     }
 
