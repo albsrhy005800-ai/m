@@ -92,7 +92,7 @@ class AimOverlayService : Service() {
             val length = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
             val ux = dx / length
             val uy = dy / length
-            val ballRadius = (table.width / 68f).coerceIn(9f, 18f)
+            val ballRadius = (table.width() / 68f).coerceIn(9f, 18f)
             val contactX = target.x - ux * ballRadius * 2f
             val contactY = target.y - uy * ballRadius * 2f
 
