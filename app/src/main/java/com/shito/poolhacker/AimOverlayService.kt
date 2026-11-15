@@ -61,21 +61,28 @@ class AimOverlayService : Service() {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val found = detection
-            val table = found.table
-            val cue = found.cue
-            if (table != null) {
-                paint.color = Color.CYAN
-                paint.strokeWidth = 4f
-                canvas.drawRect(table, paint)
-            }
-            if (cue != null) {
-                paint.color = Color.WHITE
-                paint.strokeWidth = 4f
-                canvas.drawCircle(cue.x, cue.y, 18f, paint)
-                paint.color = Color.GREEN
-                paint.strokeWidth = 5f
-                canvas.drawLine(cue.x, cue.y, table?.right ?: width.toFloat(), cue.y, paint)
-            }
+            val cue = found.cue ?: return
+            val table = found.table ?: return
+            val target = found.balls.minByOrNull {
+                kotlin.math.hypot(it.x - cue.x, it.y - cue.y)
+            } ?: return
+
+            // Clean aiming guide: no debug table rectangle or detection boxes.
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.WHITE
+            paint.strokeWidth = 3f
+            canvas.drawCircle(cue.x, cue.y, 9f, paint)
+            paint.color = Color.rgb(80, 255, 150)
+            paint.strokeWidth = 4f
+            canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
+
+            // Clip the guide to the automatically estimated playing area.
+            canvas.save()
+            canvas.clipRect(table)
+            paint.color = Color.argb(150, 80, 255, 150)
+            paint.strokeWidth = 2f
+            canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
+            canvas.restore()
         }
     }
 }
