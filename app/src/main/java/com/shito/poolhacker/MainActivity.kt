@@ -2,23 +2,163 @@ package com.shito.poolhacker
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.view.Gravity
+import android.widget.Toast
 
 class MainActivity : Activity() {
+    private val poolPackage = "com.miniclip.eightballpool"
+    private var waitingForOverlayPermission = false
+    private lateinit var statusText: TextView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(32, 32, 32, 32) }
-        layout.addView(TextView(this).apply { text = "SHITO POOL HACKER\nخطوط تصويب مساعدة"; textSize = 24f; gravity = Gravity.CENTER })
-        layout.addView(Button(this).apply { text = "السماح بالظهور فوق التطبيقات"; setOnClickListener { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } })
-        layout.addView(Button(this).apply { text = "تشغيل خطوط التصويب"; setOnClickListener { if (Settings.canDrawOverlays(this@MainActivity)) startService(Intent(this@MainActivity, AimOverlayService::class.java)) } })
-        layout.addView(Button(this).apply { text = "إيقاف الخطوط"; setOnClickListener { stopService(Intent(this@MainActivity, AimOverlayService::class.java)) } })
-        layout.addView(Button(this).apply { text = "فتح 8 Ball Pool"; setOnClickListener { val launch = packageManager.getLaunchIntentForPackage("com.miniclip.eightballpool"); if (launch != null) startActivity(launch) } })
-        setContentView(layout)
+        buildScreen()
     }
+
+    private fun buildScreen() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24), dp(32), dp(24), dp(24))
+            setBackgroundColor(Color.rgb(9, 18, 17))
+        }
+
+        val title = TextView(this).apply {
+            text = "SHITO POOL"
+            textSize = 27f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+        root.addView(title, matchWrap())
+
+        val subtitle = TextView(this).apply {
+            text = "اختر لعبتك لبدء مساعد التصويب"
+            textSize = 15f
+            setTextColor(Color.LTGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(28))
+        }
+        root.addView(subtitle, matchWrap())
+
+        val section = TextView(this).apply {
+            text = "الألعاب"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.RIGHT
+        }
+        root.addView(section, matchWrap())
+
+        val gameCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = rounded(Color.rgb(20, 48, 39), dp(16))
+        }
+        val gameName = TextView(this).apply {
+            text = "🎱  8 Ball Pool"
+            textSize = 21f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.RIGHT
+        }
+        gameCard.addView(gameName, matchWrap())
+        val gameInfo = TextView(this).apply {
+            text = "مساعد خطوط التصويب"
+            textSize = 14f
+            setTextColor(Color.rgb(190, 220, 205))
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(8), 0, 0)
+        }
+        gameCard.addView(gameInfo, matchWrap())
+        val cardParams = matchWrap()
+        cardParams.topMargin = dp(12)
+        root.addView(gameCard, cardParams)
+
+        val openButton = Button(this).apply {
+            text = "فتح اللعبة وتشغيل الخطوط"
+            textSize = 16f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = rounded(Color.rgb(25, 150, 95), dp(12))
+            setOnClickListener { openGameWithOverlay() }
+        }
+        val buttonParams = matchWrap()
+        buttonParams.topMargin = dp(24)
+        root.addView(openButton, buttonParams)
+
+        val permissionButton = Button(this).apply {
+            text = "إعداد صلاحية الظهور فوق اللعبة"
+            textSize = 14f
+            isAllCaps = false
+            setOnClickListener {
+                waitingForOverlayPermission = false
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            }
+        }
+        root.addView(permissionButton, matchWrap())
+
+        val stopButton = Button(this).apply {
+            text = "إيقاف خطوط التصويب"
+            isAllCaps = false
+            setOnClickListener { stopService(Intent(this@MainActivity, AimOverlayService::class.java)) }
+        }
+        root.addView(stopButton, matchWrap())
+
+        statusText = TextView(this).apply {
+            text = "اختر 8 Ball Pool ثم اضغط فتح اللعبة"
+            textSize = 13f
+            setTextColor(Color.LTGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(18), 0, 0)
+        }
+        root.addView(statusText, matchWrap())
+        setContentView(root)
+    }
+
+    private fun openGameWithOverlay() {
+        val launchIntent = packageManager.getLaunchIntentForPackage(poolPackage)
+        if (launchIntent == null) {
+            Toast.makeText(this, "لم يتم العثور على 8 Ball Pool. ثبّت اللعبة أولاً.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            waitingForOverlayPermission = true
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            Toast.makeText(this, "اسمح بالظهور فوق التطبيقات ثم ارجع للتطبيق", Toast.LENGTH_LONG).show()
+            return
+        }
+        startService(Intent(this, AimOverlayService::class.java))
+        statusText.text = "تم تشغيل الخطوط. افتح مباراة داخل اللعبة."
+        startActivity(launchIntent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (waitingForOverlayPermission && Settings.canDrawOverlays(this)) {
+            waitingForOverlayPermission = false
+            openGameWithOverlay()
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun matchWrap(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+
+    private fun rounded(color: Int, radius: Int): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+        }
 }
