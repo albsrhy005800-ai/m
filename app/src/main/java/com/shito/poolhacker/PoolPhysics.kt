@@ -54,17 +54,20 @@ object PoolPhysics {
                 val cueBlocked = objectBalls.any { ball ->
                     ball !== target && distanceToSegment(ball, cue, ghost) < radius * 2.15f
                 }
-                val objectBlocked = route.points.zipWithNext().sumOf { (a, b) ->
-                    objectBalls.count { ball ->
-                        ball !== target && distanceToSegment(ball, a, b) < radius * 2.15f
-                    }.toFloat()
+                var objectBlocked = 0
+                for ((a, b) in route.points.zipWithNext()) {
+                    for (ball in objectBalls) {
+                        if (ball !== target && distanceToSegment(ball, a, b) < radius * 2.15f) {
+                            objectBlocked++
+                        }
+                    }
                 }
                 val cueDistance = distance(cue, ghost)
                 val routeDistance = route.length
-                val score = cueDistance + routeDistance * 0.82f +
-                    (if (cueBlocked) radius * 18f else 0f) +
-                    objectBlocked * radius * 16f +
-                    if (route.bank) radius * 1.8f else 0f
+                val bankPenalty = if (route.bank) radius * 1.8f else 0f
+                val cuePenalty = if (cueBlocked) radius * 18f else 0f
+                val score: Float = cueDistance + routeDistance * 0.82f +
+                    cuePenalty + objectBlocked.toFloat() * radius * 16f + bankPenalty
                 val solution = AimSolution(
                     ghost,
                     listOf(PointF(cue.x, cue.y), ghost),
@@ -73,7 +76,8 @@ object PoolPhysics {
                     route.bank,
                     score
                 )
-                if (best == null || score < best!!.score) best = solution
+                val currentBest = best
+                if (currentBest == null || score < currentBest.score) best = solution
             }
         }
         return best
