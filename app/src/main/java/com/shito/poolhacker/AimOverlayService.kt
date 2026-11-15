@@ -65,18 +65,21 @@ class AimOverlayService : Service() {
             val table = found.table ?: return
             val target = found.balls.minByOrNull {
                 kotlin.math.hypot(it.x - cue.x, it.y - cue.y)
-            } ?: return
+            }
 
-            // Every mark must be clipped. Never draw a full-screen guide outside the table.
+            // Draw the cue-ball marker whenever it is detected. A missed object ball
+            // must not suppress all feedback.
             canvas.save()
             canvas.clipRect(table)
             paint.style = Paint.Style.STROKE
             paint.color = Color.WHITE
             paint.strokeWidth = 3f
-            canvas.drawCircle(cue.x, cue.y, 9f, paint)
-            paint.color = Color.rgb(80, 255, 150)
-            paint.strokeWidth = 3f
-            canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
+            canvas.drawCircle(cue.x, cue.y, 11f, paint)
+            if (target != null) {
+                paint.color = Color.rgb(80, 255, 150)
+                paint.strokeWidth = 3f
+                canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
+            }
             canvas.restore()
         }
     }
