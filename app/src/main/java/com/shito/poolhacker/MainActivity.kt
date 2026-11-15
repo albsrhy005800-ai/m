@@ -1,6 +1,7 @@
 package com.shito.poolhacker
 
-import android.app.Activity\nimport android.media.projection.MediaProjectionManager
+import android.app.Activity
+import android.media.projection.MediaProjectionManager
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -17,7 +18,8 @@ import android.widget.Toast
 
 class MainActivity : Activity() {
     private val poolPackage = "com.miniclip.eightballpool"
-    private var waitingForOverlayPermission = false\n    private val captureRequest = 4102
+    private var waitingForOverlayPermission = false
+    private val captureRequest = 4102
     private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
