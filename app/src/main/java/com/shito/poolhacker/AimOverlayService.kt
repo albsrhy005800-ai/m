@@ -67,20 +67,15 @@ class AimOverlayService : Service() {
                 kotlin.math.hypot(it.x - cue.x, it.y - cue.y)
             } ?: return
 
-            // Clean aiming guide: no debug table rectangle or detection boxes.
+            // Every mark must be clipped. Never draw a full-screen guide outside the table.
+            canvas.save()
+            canvas.clipRect(table)
             paint.style = Paint.Style.STROKE
             paint.color = Color.WHITE
             paint.strokeWidth = 3f
             canvas.drawCircle(cue.x, cue.y, 9f, paint)
             paint.color = Color.rgb(80, 255, 150)
-            paint.strokeWidth = 4f
-            canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
-
-            // Clip the guide to the automatically estimated playing area.
-            canvas.save()
-            canvas.clipRect(table)
-            paint.color = Color.argb(150, 80, 255, 150)
-            paint.strokeWidth = 2f
+            paint.strokeWidth = 3f
             canvas.drawLine(cue.x, cue.y, target.x, target.y, paint)
             canvas.restore()
         }
