@@ -4,8 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PointF
 import android.graphics.RectF
+import java.util.ArrayDeque
 import kotlin.math.abs
-import kotlin.math.hypot
 
 data class DetectionResult(
     val table: RectF? = null,
@@ -13,88 +13,187 @@ data class DetectionResult(
     val balls: List<PointF> = emptyList()
 )
 
+/**
+ * Adaptive image analysis:
+ * 1) find the largest connected felt region (not a fixed screen rectangle),
+ * 2) find compact circular, non-felt color components inside that region,
+ * 3) identify the cue ball by its high neutral-white pixel ratio.
+ */
 object ScreenAnalyzer {
+    private data class Component(
+        val x: Float,
+        val y: Float,
+        val width: Int,
+        val height: Int,
+        val count: Int,
+        val whiteRatio: Float
+    )
+
     fun analyze(bitmap: Bitmap): DetectionResult {
         val w = bitmap.width
         val h = bitmap.height
-        val stride = 4
-        var left = w
-        var top = h
-        var right = 0
-        var bottom = 0
-        var feltCount = 0
+        if (w < 200 || h < 150) return DetectionResult()
+
+        val step = 4
+        val gw = (w + step - 1) / step
+        val gh = (h + step - 1) / step
+        val felt = BooleanArray(gw * gh)
         val hsv = FloatArray(3)
 
-        // Estimate the playing surface from felt-colored pixels, not a fixed table template.
-        for (y in 0 until h step stride) {
-            for (x in 0 until w step stride) {
+        for (gy in 0 until gh) {
+            val y = (gy * step + step / 2).coerceAtMost(h - 1)
+            for (gx in 0 until gw) {
+                val x = (gx * step + step / 2).coerceAtMost(w - 1)
                 Color.colorToHSV(bitmap.getPixel(x, y), hsv)
-                if (isFelt(hsv)) {
-                    left = minOf(left, x); top = minOf(top, y)
-                    right = maxOf(right, x); bottom = maxOf(bottom, y)
-                    feltCount++
-                }
+                felt[gy * gw + gx] = isTableFelt(hsv)
             }
         }
-        val tableWidth = right - left
-        val tableHeight = bottom - top
-        val tableRatio = if (tableHeight > 0) tableWidth.toFloat() / tableHeight else 0f
 
-        // A pool table is a wide landscape surface. This rejects portrait launchers
-        // and wallpaper backgrounds that were previously mistaken for blue felt.
-        if (feltCount < 450 || tableWidth < w / 4 || tableHeight < h / 5 ||
-            tableRatio !in 0.85f..2.60f) {
+        val tableComponent = largestComponent(felt, gw, gh) ?: return DetectionResult()
+        val tableWidth = (tableComponent[2] - tableComponent[0] + 1) * step
+        val tableHeight = (tableComponent[3] - tableComponent[1] + 1) * step
+        val ratio = tableWidth.toFloat() / tableHeight.coerceAtLeast(1)
+        val feltCells = tableComponent[4]
+        if (feltCells < 500 || tableWidth < w * 0.28f ||
+            tableHeight < h * 0.22f || ratio !in 1.25f..2.55f) {
             return DetectionResult()
         }
 
-        val table = RectF(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
-        val cue = findWhiteBall(bitmap, left, top, right, bottom)
-        val balls = findColoredBallCenters(bitmap, left, top, right, bottom)
-        return DetectionResult(table, cue, balls)
+        val left = (tableComponent[0] * step).toFloat()
+        val top = (tableComponent[1] * step).toFloat()
+        val right = minOf(w, (tableComponent[2] + 1) * step).toFloat()
+        val bottom = minOf(h, (tableComponent[3] + 1) * step).toFloat()
+        val table = RectF(left, top, right, bottom)
+
+        val balls = findBallComponents(bitmap, table, step)
+        val cueComponent = balls.filter { it.whiteRatio >= 0.66f }
+            .maxByOrNull { it.count * it.whiteRatio }
+        val cue = cueComponent?.let { PointF(it.x, it.y) }
+        val objects = balls.filterNot { c ->
+            cueComponent != null && abs(c.x - cueComponent.x) < step * 2f &&
+                abs(c.y - cueComponent.y) < step * 2f
+        }.map { PointF(it.x, it.y) }
+
+        return DetectionResult(table, cue, objects)
     }
 
-    private fun isFelt(hsv: FloatArray): Boolean =
-        hsv[1] > 0.30f && hsv[2] > 0.15f &&
-            (hsv[0] in 65f..175f || hsv[0] in 175f..255f || hsv[0] in 12f..48f)
+    private fun isTableFelt(hsv: FloatArray): Boolean {
+        // The blue/cyan cloth in 8 Ball Pool; avoids blue UI elements by
+        // selecting only the largest connected region in the whole frame.
+        return hsv[0] in 165f..215f && hsv[1] > 0.24f && hsv[2] > 0.22f
+    }
 
-    private fun findWhiteBall(b: Bitmap, l: Int, t: Int, r: Int, bot: Int): PointF? {
-        var best: PointF? = null
-        var bestScore = 0
-        for (y in (t + 14).coerceAtLeast(14) until (bot - 14).coerceAtMost(b.height - 14) step 6) {
-            for (x in (l + 14).coerceAtLeast(14) until (r - 14).coerceAtMost(b.width - 14) step 6) {
-                var score = 0
-                for (dy in -10..10 step 5) for (dx in -10..10 step 5) {
-                    if (dx * dx + dy * dy > 100) continue
-                    val c = b.getPixel(x + dx, y + dy)
-                    val red = Color.red(c); val green = Color.green(c); val blue = Color.blue(c)
-                    if (red > 205 && green > 205 && blue > 195 &&
-                        maxOf(red, green, blue) - minOf(red, green, blue) < 45) score++
-                }
-                if (score > bestScore) { bestScore = score; best = PointF(x.toFloat(), y.toFloat()) }
+    private fun largestComponent(mask: BooleanArray, width: Int, height: Int): IntArray? {
+        val visited = BooleanArray(mask.size)
+        val queue = ArrayDeque<Int>()
+        var best: IntArray? = null
+        var bestCount = 0
+
+        for (start in mask.indices) {
+            if (!mask[start] || visited[start]) continue
+            visited[start] = true
+            queue.add(start)
+            var minX = start % width
+            var maxX = minX
+            var minY = start / width
+            var maxY = minY
+            var count = 0
+
+            while (queue.isNotEmpty()) {
+                val p = queue.removeFirst()
+                val x = p % width
+                val y = p / width
+                count++
+                minX = minOf(minX, x); maxX = maxOf(maxX, x)
+                minY = minOf(minY, y); maxY = maxOf(maxY, y)
+
+                if (x > 0) visit(p - 1, mask, visited, queue)
+                if (x + 1 < width) visit(p + 1, mask, visited, queue)
+                if (y > 0) visit(p - width, mask, visited, queue)
+                if (y + 1 < height) visit(p + width, mask, visited, queue)
+            }
+            if (count > bestCount) {
+                bestCount = count
+                best = intArrayOf(minX, minY, maxX, maxY, count)
             }
         }
-        return if (bestScore >= 5) best else null
+        return best
     }
 
-    private fun findColoredBallCenters(b: Bitmap, l: Int, t: Int, r: Int, bot: Int): List<PointF> {
-        val candidates = ArrayList<PointF>()
+    private fun visit(p: Int, mask: BooleanArray, visited: BooleanArray, queue: ArrayDeque<Int>) {
+        if (mask[p] && !visited[p]) {
+            visited[p] = true
+            queue.add(p)
+        }
+    }
+
+    private fun findBallComponents(bitmap: Bitmap, table: RectF, step: Int): List<Component> {
+        val left = table.left.toInt().coerceAtLeast(0)
+        val top = table.top.toInt().coerceAtLeast(0)
+        val right = table.right.toInt().coerceAtMost(bitmap.width)
+        val bottom = table.bottom.toInt().coerceAtMost(bitmap.height)
+        val gw = ((right - left + step - 1) / step).coerceAtLeast(1)
+        val gh = ((bottom - top + step - 1) / step).coerceAtLeast(1)
+        val mask = BooleanArray(gw * gh)
+        val white = BooleanArray(gw * gh)
         val hsv = FloatArray(3)
-        for (y in (t + 16).coerceAtLeast(16) until (bot - 16).coerceAtMost(b.height - 16) step 10) {
-            for (x in (l + 16).coerceAtLeast(16) until (r - 16).coerceAtMost(b.width - 16) step 10) {
-                Color.colorToHSV(b.getPixel(x, y), hsv)
-                if (hsv[1] < 0.48f || hsv[2] < 0.30f) continue
-                var sameColor = 0
-                val centerHue = hsv[0]
-                for (dy in -10..10 step 5) for (dx in -10..10 step 5) {
-                    Color.colorToHSV(b.getPixel(x + dx, y + dy), hsv)
-                    val hueDistance = minOf(abs(hsv[0] - centerHue), 360f - abs(hsv[0] - centerHue))
-                    if (hsv[1] > 0.30f && hueDistance < 24f) sameColor++
-                }
-                if (sameColor >= 7 && candidates.none { hypot(it.x - x.toFloat(), it.y - y.toFloat()) < 25f }) {
-                    candidates.add(PointF(x.toFloat(), y.toFloat()))
-                }
+
+        for (gy in 0 until gh) {
+            val y = (top + gy * step + step / 2).coerceAtMost(bottom - 1)
+            for (gx in 0 until gw) {
+                val x = (left + gx * step + step / 2).coerceAtMost(right - 1)
+                Color.colorToHSV(bitmap.getPixel(x, y), hsv)
+                val index = gy * gw + gx
+                val neutralWhite = hsv[1] < 0.23f && hsv[2] > 0.72f
+                val vividBall = hsv[1] > 0.48f && hsv[2] > 0.30f &&
+                    !(hsv[0] in 165f..215f)
+                white[index] = neutralWhite
+                mask[index] = neutralWhite || vividBall
             }
         }
-        return candidates.take(16)
+
+        val visited = BooleanArray(mask.size)
+        val queue = ArrayDeque<Int>()
+        val result = ArrayList<Component>()
+
+        for (start in mask.indices) {
+            if (!mask[start] || visited[start]) continue
+            visited[start] = true
+            queue.add(start)
+            var minX = start % gw; var maxX = minX
+            var minY = start / gw; var maxY = minY
+            var count = 0
+            var whiteCount = 0
+
+            while (queue.isNotEmpty()) {
+                val p = queue.removeFirst()
+                val x = p % gw
+                val y = p / gw
+                count++
+                if (white[p]) whiteCount++
+                minX = minOf(minX, x); maxX = maxOf(maxX, x)
+                minY = minOf(minY, y); maxY = maxOf(maxY, y)
+                if (x > 0) visit(p - 1, mask, visited, queue)
+                if (x + 1 < gw) visit(p + 1, mask, visited, queue)
+                if (y > 0) visit(p - gw, mask, visited, queue)
+                if (y + 1 < gh) visit(p + gw, mask, visited, queue)
+            }
+
+            val bw = maxX - minX + 1
+            val bh = maxY - minY + 1
+            val shape = bw.toFloat() / bh.coerceAtLeast(1)
+            // Reject tiny highlights and long table decorations; pool balls
+            // remain compact and approximately circular at every resolution.
+            if (count in 5..260 && bw in 3..17 && bh in 3..17 && shape in 0.55f..1.8f) {
+                result.add(
+                    Component(
+                        left + (minX + maxX + 1) * step / 2f,
+                        top + (minY + maxY + 1) * step / 2f,
+                        bw, bh, count, whiteCount.toFloat() / count
+                    )
+                )
+            }
+        }
+        return result
     }
 }
