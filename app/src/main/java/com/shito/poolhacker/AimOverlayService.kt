@@ -65,8 +65,30 @@ class AimOverlayService : Service() {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val found = detection
-            val table = found.table ?: return
-            val cue = found.cue ?: return
+            val table = found.table
+            val cue = found.cue
+
+            // Always show a small diagnostic label. This distinguishes an invisible
+            // overlay/service from a running overlay whose image detector found nothing.
+            paint.style = Paint.Style.FILL
+            paint.textSize = 14f
+            paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            paint.color = Color.argb(205, 12, 20, 24)
+            canvas.drawRoundRect(RectF(12f, 28f, 300f, 72f), 9f, 9f, paint)
+            val status = when {
+                table == null -> "SHITO: TABLE NOT FOUND"
+                cue == null -> "SHITO: TABLE FOUND / CUE NOT FOUND"
+                else -> "SHITO: CUE FOUND / BALLS ${found.balls.size}"
+            }
+            paint.color = Color.WHITE
+            canvas.drawText(status, 22f, 55f, paint)
+
+            if (table == null) return
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2.5f
+            paint.color = Color.YELLOW
+            canvas.drawRect(table, paint)
+            if (cue == null) return
 
             canvas.save()
             canvas.clipRect(table)
