@@ -36,7 +36,14 @@ object ScreenAnalyzer {
                 }
             }
         }
-        if (feltCount < 450 || right - left < w / 4 || bottom - top < h / 5) {
+        val tableWidth = right - left
+        val tableHeight = bottom - top
+        val tableRatio = if (tableHeight > 0) tableWidth.toFloat() / tableHeight else 0f
+
+        // A pool table is a wide landscape surface. This rejects portrait launchers
+        // and wallpaper backgrounds that were previously mistaken for blue felt.
+        if (feltCount < 450 || tableWidth < w / 4 || tableHeight < h / 5 ||
+            tableRatio !in 1.20f..2.20f) {
             return DetectionResult()
         }
 
