@@ -160,7 +160,12 @@ class MainActivity : Activity() {
             putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
             putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
         }
-        startForegroundService(capture)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(capture)
+        } else {
+            // Android 7.1 and older do not provide startForegroundService().
+            startService(capture)
+        }
         startService(Intent(this, AimOverlayService::class.java))
         statusText.text = "بدأ تحليل الشاشة؛ افتح مباراة داخل اللعبة"
         packageManager.getLaunchIntentForPackage(poolPackage)?.let { startActivity(it) }
